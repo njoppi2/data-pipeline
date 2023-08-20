@@ -12,8 +12,10 @@ default_args = {
     'retry_delay': timedelta(minutes=5),
 }
 
-dag = DAG(
-    'data_engineering_challenge',
+
+# DAG 1: Data Extraction and Local Storage
+dag1 = DAG(
+    'data_extraction_and_local_storage',
     default_args=default_args,
     schedule_interval=timedelta(days=1),  # Daily execution
     catchup=False,  # Do not backfill past dates
@@ -25,26 +27,35 @@ def extract_from_postgres():
 def extract_from_csv():
     pass
 
-def load_into_final_database():
-    pass
-
-# Define tasks
+# Create PythonOperator tasks for extraction and local storage
 extract_postgres_task = PythonOperator(
     task_id='extract_from_postgres',
     python_callable=extract_from_postgres,
-    dag=dag,
+    dag=dag1,
 )
 
 extract_csv_task = PythonOperator(
     task_id='extract_from_csv',
     python_callable=extract_from_csv,
-    dag=dag,
+    dag=dag1,
 )
 
+# DAG 2: Data Loading to Final Database
+dag2 = DAG(
+    'data_loading_to_final_database',
+    default_args=default_args,
+    schedule_interval=timedelta(days=1),  # Daily execution
+    catchup=False,
+)
+
+def load_into_final_database():
+    pass
+
+# Create PythonOperator task for data loading
 load_database_task = PythonOperator(
     task_id='load_into_final_database',
     python_callable=load_into_final_database,
-    dag=dag,
+    dag=dag2,
 )
 
 # Task dependencies
