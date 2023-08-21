@@ -1,0 +1,17 @@
+# Use the official PostgreSQL image as the base image
+FROM postgres:12
+
+# Copy your health check script into the container
+COPY utils/health_check.py /utils/health_check.py
+
+# Set the working directory
+WORKDIR /
+
+# Install Python 3, pip3, and python libraries
+RUN apt-get update && apt-get install -y python3 python3-pip
+RUN pip3 install --target /utils psycopg2-binary
+RUN pip3 install --target /utils python-decouple
+
+
+# Make the health check script executable
+RUN chmod +x /utils/health_check.py
