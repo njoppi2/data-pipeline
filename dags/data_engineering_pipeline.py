@@ -7,27 +7,27 @@ import pandas as pd
 from decouple import config
 import psycopg2
 from psycopg2 import sql
-from utils.functions import get_date
 import shutil
 import csv
 import io
 from sqlalchemy import create_engine
 
 
-db_params = {
-    'dbname': config('DB_NAME'),
-    'user': config('DB_USER'),
-    'password': config('DB_PASSWORD'),
-    'host': config('DB_HOST'),
-    'port': config('DB_PORT'),
-}
-
+# Create an engine to the target database
 engine = create_engine(f'postgresql://{config("DB_USER")}:{config("DB_PASSWORD")}@{config("DB_HOST")}:{config("DB_PORT")}/{config("OUTPUT_DB_NAME")}')
+
+# Define data directory
+current_folder = os.path.dirname(os.path.abspath(__file__))
+data_dir = config('DATA_DIR') or f'{current_folder}/../data'
+
+
+def get_date():
+    return datetime.now().strftime("%Y-%m-%d")
 
 
 def extract_from_postgres(date=get_date()):
     # Establish a connection to the Postgres database
-    connection = psycopg2.connect(**db_params)
+    connection = engine.raw_connection()
 
     # Get a list of all tables in the database
     cursor = connection.cursor()
@@ -41,7 +41,7 @@ def extract_from_postgres(date=get_date()):
     # Create a directory to store the CSV files for this extraction
     for raw_table_name in tables:
         table_name = raw_table_name[0]
-        extraction_dir = f'data/postgres/{table_name}/{date}'
+        extraction_dir = f'{data_dir}/postgres/{table_name}/{date}'
 
         # Remove the directory if it exists, then create it
         if os.path.exists(extraction_dir):
@@ -70,7 +70,7 @@ def extract_from_postgres(date=get_date()):
 
 def extract_from_csv(date=get_date()):
     # Define the path to the CSV files to be extracted
-    csv_paths = ['data/order_details.csv']
+    csv_paths = [f'{data_dir}/order_details.csv']
     
     # Define a list to store the names of the tables to be extracted
     stored_tables = []
@@ -85,7 +85,7 @@ def extract_from_csv(date=get_date()):
         df = pd.read_csv(csv_file_path)
 
         # Define the directory to store the extracted data
-        extraction_dir = f'data/csv/{date}'
+        extraction_dir = f'{data_dir}/csv/{date}'
 
         # Remove the directory if it exists, then create it
         if os.path.exists(extraction_dir):
@@ -104,17 +104,38 @@ def extract_from_csv(date=get_date()):
     return stored_tables
 
 
-def load_into_final_database(csv_files, date=get_date()):
-    # Define the SQLAlchemy engine
+def load_into_final_database(csv_files=None):
+    # Define the list of CSV files to be loaded into the database
+    if csv_files is None:
+        csv_files = [
+            f'{data_dir}/postgres/suppliers/{get_date()}/suppliers.csv',
+            f'{data_dir}/postgres/employees/{get_date()}/employees.csv',
+            f'{data_dir}/postgres/shippers/{get_date()}/shippers.csv',
+            f'{data_dir}/postgres/categories/{get_date()}/categories.csv',
+            f'{data_dir}/postgres/employee_territories/{get_date()}/employee_territories.csv',
+            f'{data_dir}/postgres/region/{get_date()}/region.csv',
+            f'{data_dir}/postgres/customer_demographics/{get_date()}/customer_demographics.csv',
+            f'{data_dir}/postgres/us_states/{get_date()}/us_states.csv',
+            f'{data_dir}/postgres/products/{get_date()}/products.csv',
+            f'{data_dir}/postgres/territories/{get_date()}/territories.csv',
+            f'{data_dir}/postgres/customer_customer_demo/{get_date()}/customer_customer_demo.csv',
+            f'{data_dir}/postgres/customers/{get_date()}/customers.csv',
+            f'{data_dir}/postgres/orders/{get_date()}/orders.csv',
+            f'{data_dir}/csv/{get_date()}/order_details.csv'
+         ]
+        
+    # Make sure step 2 can't be executed if step 1 hasn't been successfully completed
+    for file_path in csv_files:
+        if not os.path.isfile(file_path):
+            raise ValueError(f"CSV file does not exist at: {file_path}")
 
     # Attempt to establish a connection to the target PostgreSQL database
     try:
-        connection = psycopg2.connect(**db_params)
+        connection = engine.raw_connection()
         cursor = connection.cursor()
 
     except Exception as e:
-        print(f"Error connecting to the database: {str(e)}")
-        return
+        raise ValueError(f"Error connecting to the database: {str(e)}")
 
     try:
         # Disable autocommit mode to create a database
@@ -154,20 +175,19 @@ def load_into_final_database(csv_files, date=get_date()):
                 output = io.StringIO()
                 chunk.to_csv(output, sep='\t', header=False, index=False)
                 output.seek(0)
-                contents = output.getvalue()
                 cursor.copy_from(output, table_name, null="") # null values become ''
                 connection.commit()
                 cursor.close()
                 connection.close()
 
             print(f"Data loaded into table '{table_name}' in the target database.")
-
-        except Exception as e:
-            print(f"Error loading data into table '{table_name}': {str(e)}")
-            connection.rollback()
-        finally:
             cursor.close()
-    connection.close()
+            connection.close()
+        except Exception as e:
+            connection.rollback()
+            cursor.close()
+            connection.close()
+            raise ValueError(f"Error loading data into table '{table_name}': {str(e)}")
 
 
 def execute_query(query, is_ddl=False):
@@ -200,11 +220,11 @@ def execute_query(query, is_ddl=False):
 
 
 default_args = {
-    'owner': 'your_name',
+    'owner': 'airflow',
     'depends_on_past': False,
     'start_date': datetime(2023, 8, 19),
     'retries': 1,
-    'retry_delay': timedelta(minutes=5),
+    'retry_delay': timedelta(minutes=1),
 }
 
 # DAG 1: Data Extraction and Local Storage
@@ -237,20 +257,18 @@ dag2 = DAG(
 )
 
 # Define a sensor task in dag2 to wait for a task in dag1 to complete
-wait_for_extract_task = ExternalTaskSensor(
-    task_id='wait_for_extract_task',
-    external_dag_id='data_extraction_and_local_storage',  # DAG ID of dag1
-    external_task_id='extract_from_postgres',  # Task ID of the task to wait for in dag1
-    dag=dag2,
-)
+# wait_for_extract_task = ExternalTaskSensor(
+#     task_id='wait_for_extract_task',
+#     external_dag_id='data_extraction_and_local_storage',  # DAG ID of dag1
+#     external_task_id='extract_from_postgres',  # Task ID of the task to wait for in dag1
+#     dag=dag2,
+# )
+
 
 # Create PythonOperator task for data loading
 load_database_task = PythonOperator(
     task_id='load_into_final_database',
     python_callable=load_into_final_database,
-    # op_args=[csv_files],  # Pass the list of CSV files as an argument
+    # op_args=[csv_files],
     dag=dag2,
 )
-
-# Task dependencies
-wait_for_extract_task >> load_database_task

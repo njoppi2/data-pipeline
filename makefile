@@ -1,6 +1,6 @@
 # Prepare the Docker Compose setup
 init:
-	mkdir -p ./dags ./logs ./plugins ./config
+	mkdir -p ./logs ./plugins ./config
 
 # Start the Docker Compose setup
 up:
@@ -18,4 +18,4 @@ stop: down
 
 # Clean up the Docker Compose setup
 clean:
-	rm -rf ./dags ./logs ./plugins ./config
+	rm -rf ./logs ./plugins ./config

@@ -1,7 +1,6 @@
-dags/
 config/
 logs/
 plugins/
 data/csv
 data/postgres
-__pycache__/
+**/__pycache__/
