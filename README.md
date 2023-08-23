@@ -13,30 +13,32 @@ To set up and run the data engineering pipeline, follow these steps:
 ```
 make start
 ```
-And afterwards, you could stop everything with:
+And afterwards, you can stop everything with:
 ```
 make stop
 ```
 
-It can take 1-2 minutes for Airflow webserver to start. You can monitor the progress in the same terminal you ran `make start`.
+It can take 1-2 minutes for Airflow to fully start. You can monitor the progress in the same terminal you ran `make start`.
 
-Once the containers are up and running, open a web browser and go to [http://localhost:8080/](http://localhost:8080/) to access the Apache Airflow web interface. To authenticate, use:
+Once the containers are up and running, open a web browser and go to [http://localhost:8080/](http://localhost:8080/) to access the Apache Airflow web interface. If the web interface doesn't load, it means Airflow is still starting, if it loads, it means Airflow has fully started.
+
+To authenticate, use:
 - User: airflow
-- Password airflow
+- Password: airflow  
 
 In the Airflow web interface, you will find two DAGs representing the data pipeline:
 <br/><img src="https://github.com/njoppi2/data-pipeline/assets/16853682/56442fe7-7f2e-41fa-af1f-8d1bcfba1233" alt="drawing" width="700"/><br/>
 
 - **data_extraction_and_local_storage**: This DAG handles Step 1 of the challenge, which involves extracting data from the Postgres database and CSV file.
 - **data_loading_to_final_database**: This DAG manages Step 2, which loads the extracted data to Postgres.
-Click on the "play" button for the DAG you want to execute (e.g., data_extraction_and_local_storage).
+Click on the "play" button for the DAG you want to execute.
 
 A calendar view will appear. Select a date as a parameter for the execution of the DAG and click "Trigger" to start the pipeline.
 <br/><img src="https://github.com/njoppi2/data-pipeline/assets/16853682/d608b96b-5b69-43a2-97a3-5cafb799d460" alt="drawing" width="700"/><br/>
 After you click you'll be redirected back to the home page, where you'll be able to see the status of the running DAG.
 
 ### Error debugging
-In case one of your DAG's tasks fail, you can check the logs to help you understand what happened.
+In case one of your DAG's tasks fail, you can check the logs to help you better understand what happened.
 <br/><img src="https://github.com/njoppi2/data-pipeline/assets/16853682/1c50b7c0-10d8-4630-9c81-3e2961cd81b4" alt="drawing" width="700"/><br/>
 
 ### Running locally
