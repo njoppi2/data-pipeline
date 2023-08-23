@@ -10,17 +10,17 @@ To set up and run the data engineering pipeline, follow these steps:
 3. Open a terminal and navigate to the project directory.
 4. Run the following command to setup and start everything:
 
-```
-make start
-```
-And afterwards, you can stop everything with:
-```
-make stop
-```
+    ```
+    make start
+    ```
+    And afterwards, you can open another terminal and stop everything with:
+    ```
+    make stop
+    ```
 
 It can take 1-2 minutes for Airflow to fully start. You can monitor the progress in the same terminal you ran `make start`.
 
-Once the containers are up and running, open a web browser and go to [http://localhost:8080/](http://localhost:8080/) to access the Apache Airflow web interface. If the web interface doesn't load, it means Airflow is still starting, if it loads, it means Airflow has fully started.
+Once the containers are up and running, open a web browser and go to [http://localhost:8080/](http://localhost:8080/) to access the Apache Airflow web interface. If the web interface doesn't load, it means Airflow is still starting, if it loads, it means Airflow has fully started and we're ready to authenticate.
 
 To authenticate, use:
 - User: airflow
