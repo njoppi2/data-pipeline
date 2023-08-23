@@ -1,6 +1,7 @@
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.sensors.external_task import ExternalTaskSensor
+from airflow.models.param import Param
 from datetime import datetime, timedelta
 import os
 import pandas as pd
@@ -13,21 +14,34 @@ import io
 from sqlalchemy import create_engine
 
 
+db_params = {
+    'dbname': config('DB_NAME'),
+    'user': config('DB_USER'),
+    'password': config('DB_PASSWORD'),
+    'host': config('DB_HOST'),
+    'port': config('DB_PORT'),
+}
+
 # Create an engine to the target database
 engine = create_engine(f'postgresql://{config("DB_USER")}:{config("DB_PASSWORD")}@{config("DB_HOST")}:{config("DB_PORT")}/{config("OUTPUT_DB_NAME")}')
 
 # Define data directory
 current_folder = os.path.dirname(os.path.abspath(__file__))
-data_dir = config('DATA_DIR') or f'{current_folder}/../data'
-
+data_dir = config('DATA_DIR') or os.path.abspath(f'{current_folder}/../data')
 
 def get_date():
     return datetime.now().strftime("%Y-%m-%d")
 
 
-def extract_from_postgres(date=get_date()):
+def extract_from_postgres(**raw_context):
+    context = {"params": {"date": None}}
+    context.update(raw_context)
+
+    # Define the date to be used for the extraction
+    date = context["params"]["date"] or get_date()
+
     # Establish a connection to the Postgres database
-    connection = engine.raw_connection()
+    connection = psycopg2.connect(**db_params)
 
     # Get a list of all tables in the database
     cursor = connection.cursor()
@@ -68,7 +82,13 @@ def extract_from_postgres(date=get_date()):
     return stored_tables
 
 
-def extract_from_csv(date=get_date()):
+def extract_from_csv(**raw_context):
+    context = {"params": {"date": None}}
+    context.update(raw_context)
+
+    # Define the date to be used for the extraction
+    date = context["params"]["date"] or get_date()
+
     # Define the path to the CSV files to be extracted
     csv_paths = [f'{data_dir}/order_details.csv']
     
@@ -104,24 +124,31 @@ def extract_from_csv(date=get_date()):
     return stored_tables
 
 
-def load_into_final_database(csv_files=None):
+def load_into_final_database(**raw_context):
+    context = {"params": {"date": None}}
+    context.update(raw_context)
+
+    # Define the date to be used for the extraction
+    date = context["params"]["date"] or get_date()
+    csv_files = context["params"].get("csv_files", None)
+
     # Define the list of CSV files to be loaded into the database
     if csv_files is None:
         csv_files = [
-            f'{data_dir}/postgres/suppliers/{get_date()}/suppliers.csv',
-            f'{data_dir}/postgres/employees/{get_date()}/employees.csv',
-            f'{data_dir}/postgres/shippers/{get_date()}/shippers.csv',
-            f'{data_dir}/postgres/categories/{get_date()}/categories.csv',
-            f'{data_dir}/postgres/employee_territories/{get_date()}/employee_territories.csv',
-            f'{data_dir}/postgres/region/{get_date()}/region.csv',
-            f'{data_dir}/postgres/customer_demographics/{get_date()}/customer_demographics.csv',
-            f'{data_dir}/postgres/us_states/{get_date()}/us_states.csv',
-            f'{data_dir}/postgres/products/{get_date()}/products.csv',
-            f'{data_dir}/postgres/territories/{get_date()}/territories.csv',
-            f'{data_dir}/postgres/customer_customer_demo/{get_date()}/customer_customer_demo.csv',
-            f'{data_dir}/postgres/customers/{get_date()}/customers.csv',
-            f'{data_dir}/postgres/orders/{get_date()}/orders.csv',
-            f'{data_dir}/csv/{get_date()}/order_details.csv'
+            f'{data_dir}/postgres/suppliers/{date}/suppliers.csv',
+            f'{data_dir}/postgres/employees/{date}/employees.csv',
+            f'{data_dir}/postgres/shippers/{date}/shippers.csv',
+            f'{data_dir}/postgres/categories/{date}/categories.csv',
+            f'{data_dir}/postgres/employee_territories/{date}/employee_territories.csv',
+            f'{data_dir}/postgres/region/{date}/region.csv',
+            f'{data_dir}/postgres/customer_demographics/{date}/customer_demographics.csv',
+            f'{data_dir}/postgres/us_states/{date}/us_states.csv',
+            f'{data_dir}/postgres/products/{date}/products.csv',
+            f'{data_dir}/postgres/territories/{date}/territories.csv',
+            f'{data_dir}/postgres/customer_customer_demo/{date}/customer_customer_demo.csv',
+            f'{data_dir}/postgres/customers/{date}/customers.csv',
+            f'{data_dir}/postgres/orders/{date}/orders.csv',
+            f'{data_dir}/csv/{date}/order_details.csv'
          ]
         
     # Make sure step 2 can't be executed if step 1 hasn't been successfully completed
@@ -131,7 +158,7 @@ def load_into_final_database(csv_files=None):
 
     # Attempt to establish a connection to the target PostgreSQL database
     try:
-        connection = engine.raw_connection()
+        connection = psycopg2.connect(**db_params)
         cursor = connection.cursor()
 
     except Exception as e:
@@ -191,32 +218,29 @@ def load_into_final_database(csv_files=None):
 
 
 def execute_query(query, is_ddl=False):
-    try:
-        # Create a database connection
-        connection = engine.raw_connection()
-        cursor = connection.cursor()
+    # Create a database connection
+    connection = engine.raw_connection()
+    cursor = connection.cursor()
 
-        # Execute the query
-        cursor.execute(query)
-        
-        # Commit the changes for DDL queries
-        if is_ddl:
-            connection.commit()
+    # Execute the query
+    cursor.execute(query)
+    
+    # Fetch the result as a DataFrame for SELECT queries
+    if not is_ddl:
+        query_result = pd.read_sql_query(query, connection)
+        query_dir = f'{data_dir}/query'
+        os.makedirs(query_dir, exist_ok=True)
+        query_result.to_csv(f'{query_dir}/result.csv', index=False)
 
-        # Fetch the result as a DataFrame for SELECT queries
-        if not is_ddl:
-            query_result = pd.read_sql_query(query, connection)
-        else:
-            query_result = None
-        
-        # Close the cursor and connection
-        cursor.close()
-        connection.close()
+    else:
+        query_result = None
+        connection.commit()  # Commit the changes for DDL queries
+    
+    # Close the cursor and connection
+    cursor.close()
+    connection.close()
 
-        return query_result
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        return None
+    return query_result
 
 
 default_args = {
@@ -225,14 +249,21 @@ default_args = {
     'start_date': datetime(2023, 8, 19),
     'retries': 1,
     'retry_delay': timedelta(minutes=1),
+    'catchup': False,
+    'schedule_interval': timedelta(days=1),
+    'params': {
+        "date": Param(
+            get_date(),
+            type="string",
+            format="date",
+        ),
+    },
 }
 
 # DAG 1: Data Extraction and Local Storage
 dag1 = DAG(
     'data_extraction_and_local_storage',
     default_args=default_args,
-    schedule_interval=timedelta(days=1),  # Daily execution
-    catchup=False,  # Do not backfill past dates
 )
 
 # Create PythonOperator tasks for extraction and local storage
@@ -252,8 +283,6 @@ extract_csv_task = PythonOperator(
 dag2 = DAG(
     'data_loading_to_final_database',
     default_args=default_args,
-    schedule_interval=timedelta(days=1),  # Daily execution
-    catchup=False,
 )
 
 # Define a sensor task in dag2 to wait for a task in dag1 to complete

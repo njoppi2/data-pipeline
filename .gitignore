@@ -3,4 +3,5 @@ logs/
 plugins/
 data/csv
 data/postgres
+data/query
 **/__pycache__/
