@@ -12,8 +12,15 @@ import shutil
 import csv
 import io
 from sqlalchemy import create_engine
+import glob
 
+# Define constants
+POSTGRES_DIR = 'postgres'
+CSV_DIR = 'csv'
+QUERY_DIR = 'query'
+DELIMITER = ','
 
+# Define the parameters for the source database
 db_params = {
     'dbname': config('DB_NAME'),
     'user': config('DB_USER'),
@@ -26,11 +33,23 @@ db_params = {
 engine = create_engine(f'postgresql://{config("DB_USER")}:{config("DB_PASSWORD")}@{config("DB_HOST")}:{config("DB_PORT")}/{config("OUTPUT_DB_NAME")}')
 
 # Define data directory
-current_folder = os.path.dirname(os.path.abspath(__file__))
-data_dir = config('DATA_DIR') or os.path.abspath(f'{current_folder}/../data')
+current_dir = os.path.dirname(os.path.abspath(__file__))
+base_dir = config('DATA_DIR') or os.path.abspath(f'{current_dir}/../data')
 
 def get_date():
     return datetime.now().strftime("%Y-%m-%d")
+
+
+def create_csv(df, base_path, file_name):
+    # Remove the directory if it exists, then create it
+    if os.path.exists(base_path):
+        shutil.rmtree(base_path)
+    os.makedirs(base_path)
+
+    # Save the DataFrame as a CSV file
+    output_file = os.path.join(base_path, file_name)
+    df.to_csv(output_file, index=False)
+    return output_file
 
 
 def extract_from_postgres(**raw_context):
@@ -41,44 +60,33 @@ def extract_from_postgres(**raw_context):
     date = context["params"]["date"] or get_date()
 
     # Establish a connection to the Postgres database
-    connection = psycopg2.connect(**db_params)
+    with psycopg2.connect(**db_params) as connection:
+        # Get a list of all tables in the database
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';")
+            tables = cursor.fetchall()
 
-    # Get a list of all tables in the database
-    cursor = connection.cursor()
-    cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';")
-    tables = cursor.fetchall()
-    cursor.close()
+        # Define a list to store the names of the tables to be extracted
+        stored_tables = []
 
-    # Define a list to store the names of the tables to be extracted
-    stored_tables = []
+        # Create a directory to store the CSV files for this extraction
+        for raw_table_name in tables:
+            table_name = raw_table_name[0]
+            postgres_path = f'{base_dir}/{POSTGRES_DIR}/{table_name}/{date}'
 
-    # Create a directory to store the CSV files for this extraction
-    for raw_table_name in tables:
-        table_name = raw_table_name[0]
-        extraction_dir = f'{data_dir}/postgres/{table_name}/{date}'
+            # Define the SQL query to extract all data from the current table
+            query = f"SELECT * FROM {table_name};"
 
-        # Remove the directory if it exists, then create it
-        if os.path.exists(extraction_dir):
-            shutil.rmtree(extraction_dir)
-        os.makedirs(extraction_dir)
+            # Save data in CSV file
+            df = pd.read_sql_query(query, connection)
+            file_name = f'{table_name}.csv'
+            output_file = create_csv(df, postgres_path, file_name)
+            
+            # Add the table name to the list of stored tables
+            stored_tables.append(output_file)
 
-        # Define the SQL query to extract all data from the current table
-        query = f"SELECT * FROM {table_name};"
+            print(f"Data extracted from table '{table_name}' and saved to {output_file}")
 
-        # Read data from the current table into a Pandas DataFrame
-        df = pd.read_sql_query(query, connection)
-
-        # Save the DataFrame as a CSV file
-        output_file = os.path.join(extraction_dir, f'{table_name}.csv')
-        df.to_csv(output_file, index=False)
-
-        # Add the table name to the list of stored tables
-        stored_tables.append(output_file)
-
-        print(f"Data extracted from table '{table_name}' and saved to {output_file}")
-
-    # Close the connection to the Postgres database
-    connection.close()
     return stored_tables
 
 
@@ -90,36 +98,28 @@ def extract_from_csv(**raw_context):
     date = context["params"]["date"] or get_date()
 
     # Define the path to the CSV files to be extracted
-    csv_paths = [f'{data_dir}/order_details.csv']
+    input_csv_paths = [f'{base_dir}/order_details.csv']
     
     # Define a list to store the names of the tables to be extracted
     stored_tables = []
 
-    for csv_file_path in csv_paths:
+    for input_csv_path in input_csv_paths:
+        csv_path = f'{base_dir}/{CSV_DIR}/{date}'
+
         # Check if the CSV file exists
-        if not os.path.isfile(csv_file_path):
-            print(f"CSV file does not exist at: {csv_file_path}")
+        if not os.path.isfile(input_csv_path):
+            print(f"CSV file does not exist at: {input_csv_path}")
             continue
 
-        # Read data from the CSV file into a Pandas DataFrame
-        df = pd.read_csv(csv_file_path)
-
-        # Define the directory to store the extracted data
-        extraction_dir = f'{data_dir}/csv/{date}'
-
-        # Remove the directory if it exists, then create it
-        if os.path.exists(extraction_dir):
-            shutil.rmtree(extraction_dir)
-        os.makedirs(extraction_dir)
-
-        # Save the DataFrame as a CSV file
-        output_file = os.path.join(extraction_dir, os.path.basename(csv_file_path))
-        df.to_csv(output_file, index=False)
+        # Save data in CSV file
+        df = pd.read_csv(input_csv_path)
+        file_name = os.path.basename(input_csv_path)
+        output_file = create_csv(df, csv_path, file_name)
 
         # Add the table name to the list of stored tables
         stored_tables.append(output_file)
 
-        print(f"Data extracted from CSV file '{csv_file_path}' and saved to {output_file}")
+        print(f"Data extracted from CSV file '{input_csv_path}' and saved to {output_file}")
 
     return stored_tables
 
@@ -132,52 +132,31 @@ def load_into_final_database(**raw_context):
     date = context["params"]["date"] or get_date()
     csv_files = context["params"].get("csv_files", None)
 
-    # Define the list of CSV files to be loaded into the database
     if csv_files is None:
-        csv_files = [
-            f'{data_dir}/postgres/suppliers/{date}/suppliers.csv',
-            f'{data_dir}/postgres/employees/{date}/employees.csv',
-            f'{data_dir}/postgres/shippers/{date}/shippers.csv',
-            f'{data_dir}/postgres/categories/{date}/categories.csv',
-            f'{data_dir}/postgres/employee_territories/{date}/employee_territories.csv',
-            f'{data_dir}/postgres/region/{date}/region.csv',
-            f'{data_dir}/postgres/customer_demographics/{date}/customer_demographics.csv',
-            f'{data_dir}/postgres/us_states/{date}/us_states.csv',
-            f'{data_dir}/postgres/products/{date}/products.csv',
-            f'{data_dir}/postgres/territories/{date}/territories.csv',
-            f'{data_dir}/postgres/customer_customer_demo/{date}/customer_customer_demo.csv',
-            f'{data_dir}/postgres/customers/{date}/customers.csv',
-            f'{data_dir}/postgres/orders/{date}/orders.csv',
-            f'{data_dir}/csv/{date}/order_details.csv'
-         ]
+        # Define the list of CSV files to be loaded into the database
+        csv_files = glob.glob(os.path.join(base_dir, CSV_DIR, date, '*.csv'))
+        postgres_files = glob.glob(os.path.join(base_dir, POSTGRES_DIR, '**', date, '*.csv'), recursive=True)
         
+        # Combine both lists of files
+        csv_files.extend(postgres_files)
     # Make sure step 2 can't be executed if step 1 hasn't been successfully completed
     for file_path in csv_files:
         if not os.path.isfile(file_path):
-            raise ValueError(f"CSV file does not exist at: {file_path}")
+            raise Exception(f"CSV file does not exist at: {file_path}")
 
-    # Attempt to establish a connection to the target PostgreSQL database
-    connection = psycopg2.connect(**db_params)
-    cursor = connection.cursor()
-
+    # Create a new database if it doesn't exist
     try:
-        # Disable autocommit mode to create a database
+        connection = psycopg2.connect(**db_params)
         connection.autocommit = True
-
-        # Create a new database if it doesn't exist
-        cursor.execute(f"CREATE DATABASE {config('OUTPUT_DB_NAME')}")
-
-        # Re-enable autocommit mode for subsequent operations
-        connection.autocommit = False
-
-        connection.commit()
+        with connection.cursor() as cursor:
+            cursor.execute(f"CREATE DATABASE {config('OUTPUT_DB_NAME')}")
+            connection.commit()
         print(f"Connected to database '{config('OUTPUT_DB_NAME')}'.")
-
-    except psycopg2.Error as e:
-        print(f"Didn't create database: {e}")
-
+    except psycopg2.errors.DuplicateDatabase as e:
+        print(f"{str(e)}")
+    except Exception as e:
+        raise Exception(f"An error occurred: {str(e)}")
     finally:
-        cursor.close()
         connection.close()
 
     # Iterate over the list of CSV file paths and load them into PostgreSQL
@@ -185,56 +164,38 @@ def load_into_final_database(**raw_context):
         table_name = os.path.splitext(os.path.basename(csv_file_path))[0]
 
         try:
-
-            # Read CSV file into a pandas DataFrame
             df = pd.read_csv(csv_file_path)
-
-            # Drop old table and create new empty table
-            df.head(0).to_sql(table_name, engine, if_exists='replace',index=False)
-
-            for chunk in pd.read_csv(csv_file_path, encoding="utf-8", delimiter=',', chunksize=1000):
-                connection = engine.raw_connection()
-                cursor = connection.cursor()
-                output = io.StringIO()
-                chunk.to_csv(output, sep='\t', header=False, index=False)
-                output.seek(0)
-                cursor.copy_from(output, table_name, null="") # null values become ''
-                connection.commit()
-                cursor.close()
-                connection.close()
-
+            df.head(0).to_sql(table_name, engine, if_exists='replace', index=False)
+        
+            with engine.begin() as connection:
+                with connection.connection.cursor() as cursor:
+                    for chunk in pd.read_csv(csv_file_path, delimiter=DELIMITER, chunksize=1000):
+                        output = io.StringIO()
+                        chunk.to_csv(output, sep="\t", header=False, index=False)
+                        output.seek(0)
+                        cursor.copy_from(output, table_name, null="")
+        
             print(f"Data loaded into table '{table_name}' in the target database.")
-            cursor.close()
-            connection.close()
         except Exception as e:
-            connection.rollback()
-            cursor.close()
-            connection.close()
-            raise ValueError(f"Error loading data into table '{table_name}': {str(e)}")
+            raise Exception(f"Error loading data into table '{table_name}': {str(e)}")
 
 
 def execute_query(query, is_ddl=False):
     # Create a database connection
-    connection = engine.raw_connection()
-    cursor = connection.cursor()
+    with engine.begin() as connection:
+        with connection.connection.cursor() as cursor:
+            # Execute the query
+            cursor.execute(query)
 
-    # Execute the query
-    cursor.execute(query)
-    
-    # Fetch the result as a DataFrame for SELECT queries
-    if not is_ddl:
-        query_result = pd.read_sql_query(query, connection)
-        query_dir = f'{data_dir}/query'
-        os.makedirs(query_dir, exist_ok=True)
-        query_result.to_csv(f'{query_dir}/result.csv', index=False)
-
-    else:
-        query_result = None
-        connection.commit()  # Commit the changes for DDL queries
-    
-    # Close the cursor and connection
-    cursor.close()
-    connection.close()
+            # Fetch the result as a DataFrame for SELECT queries
+            if not is_ddl:
+                query_result = pd.read_sql_query(query, connection)
+                query_path = f'{base_dir}/{QUERY_DIR}'
+                os.makedirs(query_path, exist_ok=True)
+                query_result.to_csv(f'{query_path}/result.csv', index=False)
+            else:
+                query_result = None
+                connection.commit()  # Commit the changes for DDL queries
 
     return query_result
 
