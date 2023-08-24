@@ -157,12 +157,8 @@ def load_into_final_database(**raw_context):
             raise ValueError(f"CSV file does not exist at: {file_path}")
 
     # Attempt to establish a connection to the target PostgreSQL database
-    try:
-        connection = psycopg2.connect(**db_params)
-        cursor = connection.cursor()
-
-    except Exception as e:
-        raise ValueError(f"Error connecting to the database: {str(e)}")
+    connection = psycopg2.connect(**db_params)
+    cursor = connection.cursor()
 
     try:
         # Disable autocommit mode to create a database
