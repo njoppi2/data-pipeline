@@ -1,3 +1,4 @@
+from typing import Any, List, Optional, Union
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.sensors.external_task import ExternalTaskSensor
@@ -36,11 +37,11 @@ engine = create_engine(f'postgresql://{config("DB_USER")}:{config("DB_PASSWORD")
 current_dir = os.path.dirname(os.path.abspath(__file__))
 base_dir = config('DATA_DIR') or os.path.abspath(f'{current_dir}/../data')
 
-def get_date():
+def get_date() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
-def create_csv(df, base_path, file_name):
+def create_csv(df: pd.DataFrame, base_path: str, file_name: str) -> str:
     # Remove the directory if it exists, then create it
     if os.path.exists(base_path):
         shutil.rmtree(base_path)
@@ -52,7 +53,7 @@ def create_csv(df, base_path, file_name):
     return output_file
 
 
-def extract_from_postgres(**raw_context):
+def extract_from_postgres(**raw_context: Any) -> List[str]:
     context = {"params": {"date": None}}
     context.update(raw_context)
 
@@ -90,7 +91,7 @@ def extract_from_postgres(**raw_context):
     return stored_tables
 
 
-def extract_from_csv(**raw_context):
+def extract_from_csv(**raw_context: Any) -> List[str]:
     context = {"params": {"date": None}}
     context.update(raw_context)
 
@@ -124,7 +125,7 @@ def extract_from_csv(**raw_context):
     return stored_tables
 
 
-def load_into_final_database(**raw_context):
+def load_into_final_database(**raw_context: Any) -> None:
     context = {"params": {"date": None}}
     context.update(raw_context)
 
@@ -135,14 +136,15 @@ def load_into_final_database(**raw_context):
     if csv_files is None:
         # Define the list of CSV files to be loaded into the database
         csv_files = glob.glob(os.path.join(base_dir, CSV_DIR, date, '*.csv'))
-        postgres_files = glob.glob(os.path.join(base_dir, POSTGRES_DIR, '**', date, '*.csv'), recursive=True)
-        
+        postgres_files = glob.glob(os.path.join(base_dir, POSTGRES_DIR, '**', date, '*.csv'), recursive=True)        
         # Combine both lists of files
         csv_files.extend(postgres_files)
+    
     # Make sure step 2 can't be executed if step 1 hasn't been successfully completed
-    for file_path in csv_files:
-        if not os.path.isfile(file_path):
-            raise Exception(f"CSV file does not exist at: {file_path}")
+    missing_files = [file_path for file_path in csv_files if not os.path.isfile(file_path)]
+    if missing_files or not csv_files:
+        missing_files_str = "\n".join(missing_files)
+        raise Exception(f"CSV files do not exist at:\n{missing_files_str}" if missing_files else "No CSV files to load into the database.")
 
     # Create a new database if it doesn't exist
     try:
@@ -180,7 +182,7 @@ def load_into_final_database(**raw_context):
             raise Exception(f"Error loading data into table '{table_name}': {str(e)}")
 
 
-def execute_query(query, is_ddl=False):
+def execute_query(query: str, is_ddl: bool = False) -> Optional[pd.DataFrame]:
     # Create a database connection
     with engine.begin() as connection:
         with connection.connection.cursor() as cursor:
