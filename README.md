@@ -1,4 +1,4 @@
-# 🛢️➡️ Data Engineering Pipeline
+# 🔄 Data Engineering Pipeline
 ## Overview
 This data engineering project automates the extraction of data from two sources, a Postgres database, and a CSV file, and loads it into another Postgres database. The goal is to create a pipeline that can be run daily, while maintaining idempotency of tasks and clear isolation between steps.
 
