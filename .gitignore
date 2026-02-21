@@ -5,3 +5,5 @@ data/csv
 data/postgres
 data/query
 **/__pycache__/
+.env
+dags/.env
