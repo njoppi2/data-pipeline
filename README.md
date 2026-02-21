@@ -63,6 +63,9 @@ Local checks:
 ```bash
 python -m compileall dags utils
 docker compose -f docker-compose.yml config > /dev/null
+python utils/validate_data_contracts.py \
+  --contract contracts/order_details.contract.json \
+  --csv data/order_details.csv
 ```
 
 CI (`.github/workflows/ci.yml`) validates:
@@ -70,6 +73,7 @@ CI (`.github/workflows/ci.yml`) validates:
 - Python syntax for DAG/util modules
 - Docker Compose configuration with env templates
 - Required environment template files
+- Fixture data validation against contract rules
 
 ## Results
 
@@ -88,6 +92,12 @@ CI (`.github/workflows/ci.yml`) validates:
 - Expand data contracts (schema/value constraints per table).
 - Add fixture-based integration tests for ETL paths.
 - Publish a sample dashboard/queries over the final dataset.
+
+## Data Contracts
+
+- Contract definitions live in `contracts/`.
+- Current contract coverage includes `order_details` via `contracts/order_details.contract.json`.
+- Detailed notes: [docs/data-contracts.md](docs/data-contracts.md).
 
 ## Contributing
 

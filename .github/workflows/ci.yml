@@ -44,3 +44,15 @@ jobs:
         run: |
           test -f .env.example
           test -f dags/.env.example
+
+  contract-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate fixture data against contracts
+        run: |
+          python utils/validate_data_contracts.py \
+            --contract contracts/order_details.contract.json \
+            --csv data/order_details.csv

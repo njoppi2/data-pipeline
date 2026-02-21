@@ -22,6 +22,9 @@ Run:
 ```bash
 python -m compileall dags utils
 docker compose -f docker-compose.yml config > /dev/null
+python utils/validate_data_contracts.py \
+  --contract contracts/order_details.contract.json \
+  --csv data/order_details.csv
 ```
 
 ## Pull Request Guidelines
