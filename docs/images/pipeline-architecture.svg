@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="360" viewBox="0 0 920 360" role="img" aria-labelledby="title desc">
+  <title id="title">Data Pipeline Architecture</title>
+  <desc id="desc">Sources flow into extraction, quality checks, load, and analytics database.</desc>
+  <defs>
+    <style>
+      .box { fill: #f5f7fb; stroke: #1f2937; stroke-width: 2; rx: 10; }
+      .title { font: 600 18px sans-serif; fill: #111827; }
+      .label { font: 500 14px sans-serif; fill: #111827; }
+      .arrow { stroke: #2563eb; stroke-width: 3; fill: none; marker-end: url(#m); }
+    </style>
+    <marker id="m" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#2563eb" />
+    </marker>
+  </defs>
+
+  <text x="20" y="34" class="title">ETL Flow</text>
+
+  <rect class="box" x="30" y="80" width="180" height="70" />
+  <text x="60" y="120" class="label">Postgres + CSV Sources</text>
+
+  <rect class="box" x="270" y="80" width="170" height="70" />
+  <text x="300" y="120" class="label">Extract DAG</text>
+
+  <rect class="box" x="500" y="80" width="190" height="70" />
+  <text x="530" y="120" class="label">File Quality Gate</text>
+
+  <rect class="box" x="270" y="220" width="170" height="70" />
+  <text x="300" y="260" class="label">Load DAG</text>
+
+  <rect class="box" x="500" y="220" width="190" height="70" />
+  <text x="522" y="260" class="label">DB Quality Checks</text>
+
+  <rect class="box" x="740" y="150" width="150" height="70" />
+  <text x="762" y="190" class="label">Final Postgres</text>
+
+  <path class="arrow" d="M210 115 H262" />
+  <path class="arrow" d="M440 115 H492" />
+  <path class="arrow" d="M595 154 V212" />
+  <path class="arrow" d="M440 255 H492" />
+  <path class="arrow" d="M690 115 H732" />
+  <path class="arrow" d="M690 255 H732" />
+</svg>

@@ -1,97 +1,94 @@
 # Data Engineering Pipeline
 
-A Dockerized data pipeline project that:
+[![CI](https://img.shields.io/github/actions/workflow/status/njoppi2/data-pipeline/ci.yml?branch=main&label=CI)](https://github.com/njoppi2/data-pipeline/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/njoppi2/data-pipeline)](LICENSE)
+[![Last Commit](https://img.shields.io/github/last-commit/njoppi2/data-pipeline)](https://github.com/njoppi2/data-pipeline/commits/main)
 
-- extracts data from a Postgres database and CSV files,
-- stores extracted data by execution date,
-- loads data into a final Postgres database,
-- and materializes a query result for analysis.
+Production-style ETL pipeline that extracts from Postgres and CSV sources, stores dated artifacts, loads curated tables into a final Postgres database, and materializes analysis-ready outputs.
+
+## Snapshot
+
+![Pipeline architecture](docs/images/pipeline-architecture.svg)
+
+## Problem
+
+Make ingestion and load steps reproducible, rerunnable by execution date, and safe through explicit quality gates before loading final tables.
 
 ## Tech Stack
 
-- Apache Airflow (DAG orchestration)
+- Apache Airflow
 - PostgreSQL
 - Docker / Docker Compose
 - Python (Pandas, SQLAlchemy, Psycopg2)
-
-## Pipeline Flow
-
-1. `data_extraction_and_local_storage`
-2. `data_loading_to_final_database`
-
-Both DAGs are date-parameterized and designed to be rerunnable.
 
 ## Repository Layout
 
 - `dags/data_engineering_pipeline.py`: DAG definitions and ETL logic
 - `data/`: source SQL/CSV and generated output folders
 - `docker-compose.yml`: local platform (Airflow + Postgres + Redis)
-- `main.ipynb`: local notebook execution and inspection
+- `main.ipynb`: notebook execution and inspection
 - `utils/health_check.py`: database container health check
-
-## Prerequisites
-
-- Docker Engine + Docker Compose plugin
-- GNU Make
 
 ## Quickstart
 
-1. Clone and enter the repository.
-2. Create local environment files:
+1. Create env files:
 
 ```bash
 cp .env.example .env
 cp dags/.env.example dags/.env
 ```
 
-3. Start everything:
+2. Start services:
 
 ```bash
 make start
 ```
 
-4. Open Airflow: `http://localhost:8080`
+3. Open Airflow at `http://localhost:8080` (`airflow` / `airflow`).
 
-- User: `airflow`
-- Password: `airflow`
-
-5. Trigger DAGs in this order:
-
+4. Trigger DAGs in order:
 - `data_extraction_and_local_storage`
 - `data_loading_to_final_database`
 
-Stop services with:
+Stop services:
 
 ```bash
 make stop
 ```
 
-## Running Locally Without Airflow
+## Validation and CI
 
-Use `main.ipynb` to execute the pipeline logic directly and inspect generated query results.
-
-Install local Python dependencies when running outside Docker:
+Local checks:
 
 ```bash
-pip install -r requirements-local.txt
+python -m compileall dags utils
+docker compose -f docker-compose.yml config > /dev/null
 ```
 
-## Troubleshooting
+CI (`.github/workflows/ci.yml`) validates:
 
-- Airflow startup can take 1-2 minutes on first boot.
-- If tasks fail, inspect task logs in Airflow UI.
-- Ensure `dags/.env` exists and points to reachable database values.
+- Python syntax for DAG/util modules
+- Docker Compose configuration with env templates
+- Required environment template files
 
-## Data Quality Gates
+## Results
 
-The pipeline now includes explicit quality gates:
+- Two-step DAG flow is date-parameterized and rerunnable.
+- Extraction output is validated before final DB load.
+- Load DAG runs table-level quality checks before finishing.
 
-- `validate_extracted_files` (DAG 1): verifies extracted CSV files exist, are non-empty, and are parseable.
-- `run_data_quality_checks` (DAG 2): verifies expected tables were loaded and checks that `order_details` is not empty.
+## Limitations
 
-`data_loading_to_final_database` waits for the extraction quality gate before loading.
+- Notebook-first exploration remains part of the workflow.
+- Data quality rules are still minimal and table-specific.
+- No performance benchmarking for larger source volumes yet.
 
-## Notes on Environment Files
+## Roadmap
 
-- `.env.example` and `dags/.env.example` are committed as templates.
-- Real `.env` files are intentionally ignored by git.
+- Expand data contracts (schema/value constraints per table).
+- Add fixture-based integration tests for ETL paths.
+- Publish a sample dashboard/queries over the final dataset.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
