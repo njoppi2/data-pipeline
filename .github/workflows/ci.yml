@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python-sanity:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Syntax check
+        run: python -m compileall dags utils
+
+  compose-config:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare env files
+        run: |
+          cp .env.example .env
+          cp dags/.env.example dags/.env
+
+      - name: Validate Docker Compose
+        run: docker compose -f docker-compose.yml config > /dev/null
+
+  env-template-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check environment templates
+        run: |
+          test -f .env.example
+          test -f dags/.env.example

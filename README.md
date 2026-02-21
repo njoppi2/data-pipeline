@@ -70,11 +70,26 @@ make stop
 
 Use `main.ipynb` to execute the pipeline logic directly and inspect generated query results.
 
+Install local Python dependencies when running outside Docker:
+
+```bash
+pip install -r requirements-local.txt
+```
+
 ## Troubleshooting
 
 - Airflow startup can take 1-2 minutes on first boot.
 - If tasks fail, inspect task logs in Airflow UI.
 - Ensure `dags/.env` exists and points to reachable database values.
+
+## Data Quality Gates
+
+The pipeline now includes explicit quality gates:
+
+- `validate_extracted_files` (DAG 1): verifies extracted CSV files exist, are non-empty, and are parseable.
+- `run_data_quality_checks` (DAG 2): verifies expected tables were loaded and checks that `order_details` is not empty.
+
+`data_loading_to_final_database` waits for the extraction quality gate before loading.
 
 ## Notes on Environment Files
 
