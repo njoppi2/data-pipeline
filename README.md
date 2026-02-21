@@ -8,7 +8,9 @@ Production-style ETL pipeline that extracts from Postgres and CSV sources, store
 
 ## Snapshot
 
-![Pipeline architecture](docs/images/pipeline-architecture.svg)
+<p align="center">
+  <img src="docs/images/pipeline-architecture.svg" alt="Data pipeline architecture flow from ingestion to quality checks and final load" width="900" />
+</p>
 
 ## Problem
 
